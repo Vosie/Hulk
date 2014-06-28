@@ -1,0 +1,20 @@
+{
+  "name": "hulk",
+  "author": {
+    "name": "John Hu",
+    "email": "im@john.hu"
+  },
+  "description": "A converter tool which converts the json files created by peter parker to sqlite and json. This is not a generic tool but only for vosie project",
+  "version": "0.1.0",
+  "keywords": [
+    "sqlite",
+    "json"
+  ],
+  "main": "./index.js",
+  "engines": {
+    "node": ">= 0.8.0"
+  },
+  "dependencies": {
+    "sqlite3": "*"
+  }
+}
