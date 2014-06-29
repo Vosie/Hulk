@@ -10,7 +10,7 @@
     "sqlite",
     "json"
   ],
-  "main": "./index.js",
+  "main": "./conv.js",
   "engines": {
     "node": ">= 0.8.0"
   },

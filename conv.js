@@ -41,6 +41,7 @@ if (rowJSONOutputFolder.substr(-1, 1) !== '/') {
 
 var categoryID = parseInt(process.argv[4], 10);
 var languageCount = {};
+var outputCount = {};
 
 function listJSONFilesAndConvertThem(error, files) {
   var validFiles = [];
@@ -65,9 +66,14 @@ function listJSONFilesAndConvertThem(error, files) {
       });
     } else {
       var langCount = 0;
+      console.log('================= parsed language count ==================');
       for (var key in languageCount) {
         console.log(key + ',' + languageCount[key]);
         langCount++;
+      }
+      console.log('================= output language count ==================');
+      for (var key in outputCount) {
+        console.log(key + ',' + outputCount[key])
       }
       console.log('all converted, total-language: ' + langCount);
     }
@@ -141,10 +147,7 @@ function constructOutputJSON(json, key) {
   var name = json.countryName ?
              json.name + ' (' + json.countryName + ')' : json.name;
   var shortDesc = json.shortDesc ? json.shortDesc.join('\n') : '';
-  if (!shortDesc) {
-    console.log('WikiDataError, shortDesc: ' + JSON.stringify(json));
-    return;
-  } else if (!name) {
+  if (!name) {
     console.log('WikiDataError, name: ' + JSON.stringify(json));
     return;
   } else if (!json.wikiUrl) {
@@ -182,8 +185,7 @@ function convertDataObject(json, key, done) {
         
         var outputJSON = constructOutputJSON(json, key);
         if (!outputJSON) {
-          db.close();
-          done();
+          db.close(done());
           return;
         }
 
@@ -192,8 +194,12 @@ function convertDataObject(json, key, done) {
           fs.writeFile(rowJSONOutputFolder + json.lang + '$' + key + '.json',
             JSON.stringify(outputJSON) + '\n'
           );
-          db.close();
-          done();
+          if (outputCount[json.lang]) {
+            outputCount[json.lang]++;
+          } else {
+            outputCount[json.lang] = 1;
+          }
+          db.close(done());
         }
 
         if (!row) {
