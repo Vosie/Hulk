@@ -1,5 +1,6 @@
 
 var fs = require('fs');
+var path = require('path');
 var sqlite3 = require('sqlite3').verbose();
 var CHECK_TABLE_NAME =
           'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?;';
@@ -27,17 +28,30 @@ var UPDATE_RECORD = 'UPDATE words SET label = ?, languageCode = ?,\
                                       imageURL = ?, shortDesc = ?, category = ?\
                                   WHERE serverID = ?';
 
-// argument list: [check folder] [output folder] [category id]
+// argument list: [check folder] [output folder] [category id] [category folder]
 
-var checkPath = process.argv[2];
-if (checkPath.substr(-1, 1) !== '/') {
-  checkPath += '/';
+if (process.argv.length < 6) {
+  console.log('usage: node conv.js {check folder} {output folder} ' +
+                     '{category id} {category folder name}');
+  process.exit(-1);
+  return;
 }
 
-var rowJSONOutputFolder = process.argv[3];
-if (rowJSONOutputFolder.substr(-1, 1) !== '/') {
-  rowJSONOutputFolder += '/';
+function prepareFolder(folder) {
+  if (folder.substr(-1, 1) !== path.sep) {
+    return folder + path.sep;
+  } else {
+    return folder;
+  }
 }
+
+var checkPath = prepareFolder(process.argv[2]);
+if (!checkPath.substr(0, 2) !== './') {
+  checkPath = './' + checkPath;
+}
+var rowJSONOutputFolder = prepareFolder(process.argv[3]);
+
+var categoryFolder = prepareFolder(process.argv[5]);
 
 var categoryID = parseInt(process.argv[4], 10);
 var languageCount = {};
@@ -83,7 +97,10 @@ function listJSONFilesAndConvertThem(error, files) {
 }
 
 function getSQLiteDB(lang, callback) {
-  var db = new sqlite3.Database(rowJSONOutputFolder + lang + '.sqlite3',
+  // path will be ensured before this function calls.
+  var dbFile = rowJSONOutputFolder + lang + path.sep + categoryFolder + lang +
+               '.sqlite3';
+  var db = new sqlite3.Database(dbFile,
                                 sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
                                 function cb(err) {
                                   if (err) {
@@ -117,28 +134,30 @@ function parseSingleJSONFile(file, filename, done) {
   });
 }
 
-function updateRecord(outputJSON, key, db) {
+function updateRecord(outputJSON, key, db, done) {
   db.run(UPDATE_RECORD, [outputJSON.label, outputJSON.languageCode,
                          outputJSON.url, outputJSON.latitude,
                          outputJSON.longitude, outputJSON.imageURL, outputJSON.shortDesc,
-                         outputJSON.category, outputJSON.serverID]);
+                         outputJSON.category, outputJSON.serverID],
+         done);
 }
 
-function insertRecord(outputJSON, key, db) {
+function insertRecord(outputJSON, key, db, done) {
   
   db.run(INSERT_RECORD, [outputJSON.label, outputJSON.languageCode,
                          outputJSON.serverID, outputJSON.url,
                          outputJSON.latitude, outputJSON.longitude,
                          outputJSON.imageURL, outputJSON.shortDesc,
-                         outputJSON.category]);
+                         outputJSON.category],
+         done);
 }
 
-function putRecord(outputJSON, key, db) {
+function putRecord(outputJSON, key, db, done) {
   db.get(QUERY_WORD, [outputJSON.serverID], function(err, row) {
     if (row) {
-      updateRecord(outputJSON, key, db);
+      updateRecord(outputJSON, key, db, done);
     } else {
-      insertRecord(outputJSON, key, db);
+      insertRecord(outputJSON, key, db, done);
     }
   });
 }
@@ -158,7 +177,7 @@ function constructOutputJSON(json, key) {
     return {
       'label': name,
       'languageCode': json.lang,
-      'serverID': 'country/' + key,
+      'serverID': process.argv[5] + '/' + key,
       'url': json.wikiUrl,
       'latitude': json.latitude,
       'longitude': json.longitude,
@@ -175,12 +194,23 @@ function convertDataObject(json, key, done) {
   } else {
     languageCount[json.lang] = 1;
   }
+  // ensure the lang folder which hosts category data and database.
+  if (!fs.existsSync(rowJSONOutputFolder + json.lang)) {
+    fs.mkdirSync(rowJSONOutputFolder + json.lang);
+  }
+  // ensure the lang + category folder which hosts all json data files.
+  var jsonOutputFolder = rowJSONOutputFolder + json.lang + path.sep +
+                         categoryFolder;
+  if (!fs.existsSync(jsonOutputFolder)) {
+    fs.mkdirSync(jsonOutputFolder);
+  }
   getSQLiteDB(json.lang, function(db) {
     db.serialize(function() {
       db.get(CHECK_TABLE_NAME, ['words'], function(err, row) {
         if (err) {
           console.error('hulk: ' + err);
           process.exit(-1);
+          return;
         }
         
         var outputJSON = constructOutputJSON(json, key);
@@ -190,8 +220,10 @@ function convertDataObject(json, key, done) {
         }
 
         function outputData() {
-          putRecord(outputJSON, key, db, done);
-          fs.writeFile(rowJSONOutputFolder + json.lang + '$' + key + '.json',
+          putRecord(outputJSON, key, db, function() {
+            db.close(done());
+          });
+          fs.writeFile(jsonOutputFolder + key + '.json',
             JSON.stringify(outputJSON) + '\n'
           );
           if (outputCount[json.lang]) {
@@ -199,7 +231,6 @@ function convertDataObject(json, key, done) {
           } else {
             outputCount[json.lang] = 1;
           }
-          db.close(done());
         }
 
         if (!row) {
