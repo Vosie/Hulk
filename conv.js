@@ -11,7 +11,7 @@ var CREATE_TABLE = 'CREATE TABLE words (\
                       serverID         TEXT    NOT NULL,\
                       url              TEXT    NOT NULL,\
                       latitude         TEXT,\
-                      longtitude       TEXT,\
+                      longitude       TEXT,\
                       imageURL         TEXT,\
                       shortDesc        TEXT,\
                       category         INTEGER DEFAULT ( 0 )\
@@ -19,12 +19,12 @@ var CREATE_TABLE = 'CREATE TABLE words (\
 var CREATE_INDEX =
          'CREATE UNIQUE INDEX IF NOT EXISTS serverIDIndex ON words(serverID);';
 var INSERT_RECORD ='INSERT INTO words(label, languageCode, serverID, url,\
-                                      latitude, longtitude, imageURL,\
+                                      latitude, longitude, imageURL,\
                                       shortDesc, category)\
                                 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);';
 var QUERY_WORD = 'SELECT label FROM words WHERE serverID = ?;';
 var UPDATE_RECORD = 'UPDATE words SET label = ?, languageCode = ?,\
-                                      url = ?, latitude = ?, longtitude = ?,\
+                                      url = ?, latitude = ?, longitude = ?,\
                                       imageURL = ?, shortDesc = ?, category = ?\
                                   WHERE serverID = ?';
 
