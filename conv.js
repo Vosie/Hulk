@@ -4,6 +4,17 @@ var path = require('path');
 var sqlite3 = require('sqlite3').verbose();
 var CHECK_TABLE_NAME =
           'SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?;';
+var CREATE_TABLE_METDATA = 'CREATE TABLE metadata (\
+                        _id         INTEGER PRIMARY KEY AUTOINCREMENT, \
+                        key         TEXT NOT NULL, \
+                        data        TEXT\
+                      );';
+var CREATE_TABLE_METDATA_INDEX = 
+             'CREATE UNIQUE INDEX IF NOT EXISTS metadata_key ON metadata(key);';
+var INSERT_METADATA ='INSERT INTO metadata(key, data) VALUES(?, ?);';
+var QUERY_METADATA = 'SELECT key FROM metadata WHERE key = ?;';
+var UPDATE_METADATA = 'UPDATE metadata SET data = ? WHERE key = ?';
+
 var CREATE_TABLE = 'CREATE TABLE words (\
                       _id              INTEGER PRIMARY KEY AUTOINCREMENT,\
                       label            TEXT    NOT NULL,\
@@ -29,10 +40,11 @@ var UPDATE_RECORD = 'UPDATE words SET label = ?, languageCode = ?,\
                                   WHERE serverID = ?';
 
 // argument list: [check folder] [output folder] [category id] [category folder]
+//                [db version]
 
-if (process.argv.length < 6) {
+if (process.argv.length < 7) {
   console.log('usage: node conv.js {check folder} {output folder} ' +
-                     '{category id} {category folder name}');
+                     '{category id} {category folder name} {db version}');
   process.exit(-1);
   return;
 }
@@ -54,6 +66,7 @@ var rowJSONOutputFolder = prepareFolder(process.argv[3]);
 var categoryFolder = prepareFolder(process.argv[5]);
 
 var categoryID = parseInt(process.argv[4], 10);
+var dbVersion = parseInt(process.argv[6], 10);
 var languageCount = {};
 var outputCount = {};
 
@@ -162,6 +175,24 @@ function putRecord(outputJSON, key, db, done) {
   });
 }
 
+function updateMetadata(db, key, value, done) {
+  db.run(UPDATE_METADATA, [value, key], done);
+}
+
+function insertMetadata(db, key, value, done) {
+  db.run(INSERT_METADATA, [key, value], done);
+}
+
+function putMetadata(db, key, value, done) {
+  db.get(QUERY_METADATA, [key], function(err, row) {
+    if (row) {
+      updateMetadata(db, key, value, done);
+    } else {
+      insertMetadata(db, key, value, done);
+    }
+  });
+}
+
 function constructOutputJSON(json, key) {
   var name = json.countryName ?
              json.name + ' (' + json.countryName + ')' : json.name;
@@ -188,6 +219,74 @@ function constructOutputJSON(json, key) {
   }
 }
 
+function ensureMetadata(db, version, lang, category, done) {
+  db.get(CHECK_TABLE_NAME, ['metadata'], function(err, row) {
+    if (err) {
+      console.error('hulk, putMetadata: ' + err);
+      process.exit(-1);
+      return;
+    }
+
+    function putData() {
+      putMetadata(db, 'version', version, function() {
+        putMetadata(db, 'lang', lang, function() {
+          putMetadata(db, 'category', category, done);
+        });
+      });
+    }
+
+    if (!row) {
+      db.run(CREATE_TABLE_METDATA, function() {
+        db.run(CREATE_TABLE_METDATA_INDEX, function() {
+          putData();
+        });  
+      });
+    } else {
+      putData();
+    }
+  });
+}
+
+function putConvertedDataObject(db, json, key, outputFolder, done) {
+  db.get(CHECK_TABLE_NAME, ['words'], function(err, row) {
+    if (err) {
+      console.error('hulk: ' + err);
+      process.exit(-1);
+      return;
+    }
+    
+    var outputJSON = constructOutputJSON(json, key);
+    if (!outputJSON) {
+      db.close(done());
+      return;
+    }
+
+    function outputData() {
+      putRecord(outputJSON, key, db, function() {
+        db.close(done());
+      });
+      fs.writeFile(outputFolder + key + '.json',
+        JSON.stringify(outputJSON) + '\n'
+      );
+      if (outputCount[json.lang]) {
+        outputCount[json.lang]++;
+      } else {
+        outputCount[json.lang] = 1;
+      }
+    }
+
+    if (!row) {
+      db.run(CREATE_TABLE, function() {
+        db.run(CREATE_INDEX, function() {
+          outputData();
+        });  
+      });
+    } else {
+      outputData();
+    }
+  });
+}
+
 function convertDataObject(json, key, done) {
   if (languageCount[json.lang]) {
     languageCount[json.lang]++;
@@ -206,42 +305,8 @@ function convertDataObject(json, key, done) {
   }
   getSQLiteDB(json.lang, function(db) {
     db.serialize(function() {
-      db.get(CHECK_TABLE_NAME, ['words'], function(err, row) {
-        if (err) {
-          console.error('hulk: ' + err);
-          process.exit(-1);
-          return;
-        }
-        
-        var outputJSON = constructOutputJSON(json, key);
-        if (!outputJSON) {
-          db.close(done());
-          return;
-        }
-
-        function outputData() {
-          putRecord(outputJSON, key, db, function() {
-            db.close(done());
-          });
-          fs.writeFile(jsonOutputFolder + key + '.json',
-            JSON.stringify(outputJSON) + '\n'
-          );
-          if (outputCount[json.lang]) {
-            outputCount[json.lang]++;
-          } else {
-            outputCount[json.lang] = 1;
-          }
-        }
-
-        if (!row) {
-          db.run(CREATE_TABLE, function() {
-            db.run(CREATE_INDEX, function() {
-              outputData();
-            });  
-          });
-        } else {
-          outputData();
-        }
+      ensureMetadata(db, dbVersion, json.lang, categoryFolder, function() {
+        putConvertedDataObject(db, json, key, jsonOutputFolder, done);
       });
     });
   });
