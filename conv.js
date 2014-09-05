@@ -128,7 +128,7 @@ function getSQLiteDB(lang, callback) {
 function parseSingleJSONFile(file, filename, done) {
   console.log('process file: ' + file);
   var json = require(file);
-  var key = filename.substr(0, 3);
+  var key = filename.substr(0, filename.indexOf('.'));
   convertDataObject(json, key, function() {
     var otherLangs = json.otherLanguages;
 
@@ -139,7 +139,8 @@ function parseSingleJSONFile(file, filename, done) {
       } else {
         otherLang['latitude'] = json['latitude'];
         otherLang['longitude'] = json['longitude'];
-        otherLang['flagImageURL'] = json['flagImageURL'];
+        otherLang['imageURL'] = json['flagImageURL'] ?
+                                    json['flagImageURL'] : json['imageURL'];
         convertDataObject(otherLang, key, runNext);
       }
     }
@@ -212,7 +213,7 @@ function constructOutputJSON(json, key) {
       'url': json.wikiUrl,
       'latitude': json.latitude,
       'longitude': json.longitude,
-      'imageURL': json.flagImageURL ? json.flagImageURL : '',
+      'imageURL': json.imageURL ? json.imageURL : '',
       'shortDesc': shortDesc,
       'category': categoryID
     };
