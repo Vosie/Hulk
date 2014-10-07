@@ -15,6 +15,7 @@
     "node": ">= 0.8.0"
   },
   "dependencies": {
-    "sqlite3": "*"
+    "sqlite3": "*",
+    "execSync": ">= 0.0.3"
   }
 }

@@ -1,0 +1,17 @@
+{
+  "words": [
+              {
+                "key": "category_label_1",
+                "word": "country"
+              }, {
+                "key": "category_label_2",
+                "word": "animal"
+              }
+           ],
+  "langs": [
+              "zh", "vi", "ur", "ru", "pt", "pl",
+              "no", "nl", "ko", "ka", "ja", "it",
+              "id", "fr", "es", "en", "cs", "af",
+              "ar", "uk", "sr", "fa", "de"
+           ]
+}
